@@ -10,16 +10,20 @@ app.use(cors());
 
 const activeClients = {};
 
-// Disconnect a user session
+// Cleanly disconnect a user session
 function disconnectUser(account_id) {
-    if (activeClients[account_id]) {
+    const session = activeClients[account_id];
+    if (session && session.client) {
         console.log(`🔴 Disconnecting: ${account_id}`);
-        activeClients[account_id].client.disconnect();
+
+        if (session.interval) clearInterval(session.interval);
+        session.client.removeAllListeners();
+        session.client.disconnect();
         delete activeClients[account_id];
     }
 }
 
-// Start and keep a user session alive
+// Start and keep a user session alive with pinging
 function connectUser({ account_id, access_token, status }) {
     const resource = `V2:Fortnite:PC::${crypto.randomBytes(16).toString('hex').toUpperCase()}`;
     const client = XMPP.createClient({
@@ -41,6 +45,20 @@ function connectUser({ account_id, access_token, status }) {
             bIsPlaying: true,
             ProductName: "Fortnite"
         });
+
+        // Start keepalive presence ping every 45s
+        const interval = setInterval(() => {
+            if (client.sessionStarted) {
+                client.sendPresence({
+                    status: status || "I'm online 24/7 🚀",
+                    onlineType: "online",
+                    bIsPlaying: true,
+                    ProductName: "Fortnite"
+                });
+            }
+        }, 45000);
+
+        activeClients[account_id].interval = interval;
     });
 
     client.on('disconnected', () => {
@@ -74,7 +92,7 @@ app.post('/togglePresence', async (req, res) => {
         return res.status(400).json({ success: false, message: "Missing access_token for activation." });
     }
 
-    disconnectUser(account_id); // Restart session if needed
+    disconnectUser(account_id); // Reset if already connected
     connectUser({ account_id, access_token, status });
 
     return res.json({ success: true, message: "Presence enabled." });
@@ -82,5 +100,5 @@ app.post('/togglePresence', async (req, res) => {
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-    console.log(`✅ Presence Manager listening on port ${PORT}`);
+    console.log(`✅ Presence Manager with keepalive running on port ${PORT}`);
 });
