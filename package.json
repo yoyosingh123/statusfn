@@ -7,6 +7,7 @@
     "stanza": "^12.14.0",
     "crypto": "^1.0.1",
     "body-parser": "^1.20.2",
-    "node-fetch": "^2.6.11"
+    "node-fetch": "^2.6.11",
+    "cors": "^2.8.5"
   }
 }
