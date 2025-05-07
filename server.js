@@ -4,11 +4,7 @@ const crypto = require('crypto');
 const bodyParser = require('body-parser');
 const fetch = require('node-fetch');
 const cors = require('cors');
-app.use(cors({
-    origin: 'https://fnvibes.com', // allow your PHP site's domain
-    methods: ['GET', 'POST'],
-    credentials: false
-}));
+app.use(cors()); // open to all origins (for dev)
 
 const app = express();
 app.use(bodyParser.json());
