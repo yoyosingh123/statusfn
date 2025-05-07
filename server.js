@@ -4,10 +4,12 @@ const crypto = require('crypto');
 const bodyParser = require('body-parser');
 const fetch = require('node-fetch');
 const cors = require('cors');
-app.use(cors()); // open to all origins (for dev)
 
 const app = express();
 app.use(bodyParser.json());
+
+// Open CORS to all origins (development use)
+app.use(cors());
 
 app.get('/ping', (req, res) => {
     res.send('pong');
