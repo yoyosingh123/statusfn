@@ -72,16 +72,16 @@ async function connectUser({ account_id, access_token, status, pastebin_url }) {
             }
         } else {
             sendPresence(status || "I'm online 24/7 🚀");
+
+            // ✅ Only run keepalive if not using Pastebin
+            const interval = setInterval(() => {
+                if (client.sessionStarted) {
+                    sendPresence(status || "I'm online 24/7 🚀");
+                }
+            }, 45000);
+
+            activeClients[account_id].interval = interval;
         }
-
-        // Keepalive ping every 45s
-        const interval = setInterval(() => {
-            if (client.sessionStarted) {
-                sendPresence(status || "I'm online 24/7 🚀");
-            }
-        }, 45000);
-
-        activeClients[account_id].interval = interval;
     });
 
     client.on('disconnected', () => {
@@ -115,10 +115,10 @@ app.post('/togglePresence', async (req, res) => {
         return res.status(400).json({ success: false, message: "Missing access_token." });
     }
 
-    // Just update presence if already connected
+    // If already connected, update presence or re-init pastebin
     if (activeClients[account_id] && activeClients[account_id].client.sessionStarted) {
         if (pastebin_url) {
-            disconnectUser(account_id); // restart to activate random mode
+            disconnectUser(account_id);
             connectUser({ account_id, access_token, pastebin_url });
         } else {
             activeClients[account_id].client.sendPresence({
@@ -132,7 +132,7 @@ app.post('/togglePresence', async (req, res) => {
         return res.json({ success: true, message: "Presence updated." });
     }
 
-    disconnectUser(account_id); // clear if stale
+    disconnectUser(account_id);
     connectUser({ account_id, access_token, status, pastebin_url });
 
     return res.json({ success: true, message: "Presence enabled." });
@@ -140,5 +140,5 @@ app.post('/togglePresence', async (req, res) => {
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-    console.log(`✅ Presence Manager with Pastebin random status on port ${PORT}`);
+    console.log(`✅ Presence Manager with Pastebin fixed rotation on port ${PORT}`);
 });
