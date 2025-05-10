@@ -3,6 +3,7 @@ const XMPP = require('stanza');
 const crypto = require('crypto');
 const bodyParser = require('body-parser');
 const cors = require('cors');
+const fetch = require('node-fetch');
 
 const app = express();
 app.use(bodyParser.json());
@@ -10,21 +11,19 @@ app.use(cors());
 
 const activeClients = {};
 
-// Cleanly disconnect a user session
 function disconnectUser(account_id) {
     const session = activeClients[account_id];
     if (session && session.client) {
         console.log(`🔴 Disconnecting: ${account_id}`);
-
         if (session.interval) clearInterval(session.interval);
+        if (session.statusLoop) clearInterval(session.statusLoop);
         session.client.removeAllListeners();
         session.client.disconnect();
         delete activeClients[account_id];
     }
 }
 
-// Start and keep a user session alive with pinging
-function connectUser({ account_id, access_token, status }) {
+async function connectUser({ account_id, access_token, status, pastebin_url }) {
     const resource = `V2:Fortnite:PC::${crypto.randomBytes(16).toString('hex').toUpperCase()}`;
     const client = XMPP.createClient({
         jid: `${account_id}@prod.ol.epicgames.com`,
@@ -37,23 +36,48 @@ function connectUser({ account_id, access_token, status }) {
         }
     });
 
-    client.on('session:started', () => {
+    client.on('session:started', async () => {
         console.log(`🟢 Connected: ${account_id}`);
-        client.sendPresence({
-            status: status || "I'm online 24/7 🚀",
-            onlineType: "online",
-            bIsPlaying: true,
-            ProductName: "Fortnite"
-        });
 
+        const sendPresence = (msg) => {
+            client.sendPresence({
+                status: msg,
+                onlineType: "online",
+                bIsPlaying: true,
+                ProductName: "Fortnite"
+            });
+        };
+
+        if (pastebin_url) {
+            try {
+                const response = await fetch(pastebin_url);
+                const text = await response.text();
+                const lines = text.split('\n').filter(l => l.trim().length > 0);
+
+                if (lines.length > 0) {
+                    let index = 0;
+                    sendPresence(lines[0]); // Initial
+                    const statusLoop = setInterval(() => {
+                        index = (index + 1) % lines.length;
+                        sendPresence(lines[index]);
+                    }, 5000);
+
+                    activeClients[account_id].statusLoop = statusLoop;
+                } else {
+                    sendPresence("🎮 Status Online");
+                }
+            } catch (e) {
+                console.log("❌ Failed to fetch Pastebin:", e);
+                sendPresence("🎮 Status Online");
+            }
+        } else {
+            sendPresence(status || "I'm online 24/7 🚀");
+        }
+
+        // Keepalive ping every 45s
         const interval = setInterval(() => {
             if (client.sessionStarted) {
-                client.sendPresence({
-                    status: status || "I'm online 24/7 🚀",
-                    onlineType: "online",
-                    bIsPlaying: true,
-                    ProductName: "Fortnite"
-                });
+                sendPresence(status || "I'm online 24/7 🚀");
             }
         }, 45000);
 
@@ -76,7 +100,7 @@ function connectUser({ account_id, access_token, status }) {
 }
 
 app.post('/togglePresence', async (req, res) => {
-    const { account_id, access_token, status, disable } = req.body;
+    const { account_id, access_token, status, pastebin_url, disable } = req.body;
 
     if (!account_id) {
         return res.status(400).json({ success: false, message: "Missing account_id." });
@@ -88,29 +112,33 @@ app.post('/togglePresence', async (req, res) => {
     }
 
     if (!access_token) {
-        return res.status(400).json({ success: false, message: "Missing access_token for activation." });
+        return res.status(400).json({ success: false, message: "Missing access_token." });
     }
 
-    // ✅ Update presence if already connected (no disconnect)
+    // Just update presence if already connected
     if (activeClients[account_id] && activeClients[account_id].client.sessionStarted) {
-        activeClients[account_id].client.sendPresence({
-            status: status || "I'm online 24/7 🚀",
-            onlineType: "online",
-            bIsPlaying: true,
-            ProductName: "Fortnite"
-        });
+        if (pastebin_url) {
+            disconnectUser(account_id); // restart to activate random mode
+            connectUser({ account_id, access_token, pastebin_url });
+        } else {
+            activeClients[account_id].client.sendPresence({
+                status: status || "I'm online 24/7 🚀",
+                onlineType: "online",
+                bIsPlaying: true,
+                ProductName: "Fortnite"
+            });
+        }
 
-        return res.json({ success: true, message: "Status updated without reconnect." });
+        return res.json({ success: true, message: "Presence updated." });
     }
 
-    // Otherwise, fresh connect
-    disconnectUser(account_id);
-    connectUser({ account_id, access_token, status });
+    disconnectUser(account_id); // clear if stale
+    connectUser({ account_id, access_token, status, pastebin_url });
 
     return res.json({ success: true, message: "Presence enabled." });
 });
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-    console.log(`✅ Presence Manager running with live status updates on port ${PORT}`);
+    console.log(`✅ Presence Manager with Pastebin random status on port ${PORT}`);
 });
