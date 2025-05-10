@@ -16,7 +16,7 @@ function disconnectUser(account_id) {
     if (session && session.client) {
         console.log(`🔴 Disconnecting: ${account_id}`);
         if (session.interval) clearInterval(session.interval);
-        if (session.statusLoop) clearInterval(session.statusLoop);
+        if (session.statusLoop) clearTimeout(session.statusLoop);
         session.client.removeAllListeners();
         session.client.disconnect();
         delete activeClients[account_id];
@@ -64,18 +64,20 @@ async function connectUser({ account_id, access_token, status, pastebin_url }) {
                 if (lines.length > 0) {
                     shuffleArray(lines);
                     let index = 0;
-                    sendPresence(lines[0]);
 
-                    const statusLoop = setInterval(() => {
+                    const sendNextStatus = () => {
+                        const current = lines[index];
+                        sendPresence(current);
                         index++;
                         if (index >= lines.length) {
                             shuffleArray(lines);
                             index = 0;
                         }
-                        sendPresence(lines[index]);
-                    }, 5000);
+                        const delay = current.length >= 60 ? 8000 : 5000;
+                        activeClients[account_id].statusLoop = setTimeout(sendNextStatus, delay);
+                    };
 
-                    activeClients[account_id].statusLoop = statusLoop;
+                    sendNextStatus();
                 } else {
                     sendPresence("🎮 Status Online");
                 }
@@ -151,5 +153,5 @@ app.post('/togglePresence', async (req, res) => {
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-    console.log(`✅ Presence Manager with shuffled Pastebin rotation running on port ${PORT}`);
+    console.log(`✅ Presence Manager with dynamic timing running on port ${PORT}`);
 });
