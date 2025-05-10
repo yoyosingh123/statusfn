@@ -73,7 +73,7 @@ async function connectUser({ account_id, access_token, status, pastebin_url }) {
                             shuffleArray(lines);
                             index = 0;
                         }
-                        const delay = current.length >= 60 ? 8000 : 5000;
+                        const delay = current.length >= 50 ? 8000 : 5000;
                         activeClients[account_id].statusLoop = setTimeout(sendNextStatus, delay);
                     };
 
