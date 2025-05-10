@@ -46,7 +46,6 @@ function connectUser({ account_id, access_token, status }) {
             ProductName: "Fortnite"
         });
 
-        // Start keepalive presence ping every 45s
         const interval = setInterval(() => {
             if (client.sessionStarted) {
                 client.sendPresence({
@@ -92,7 +91,20 @@ app.post('/togglePresence', async (req, res) => {
         return res.status(400).json({ success: false, message: "Missing access_token for activation." });
     }
 
-    disconnectUser(account_id); // Reset if already connected
+    // ✅ Update presence if already connected (no disconnect)
+    if (activeClients[account_id] && activeClients[account_id].client.sessionStarted) {
+        activeClients[account_id].client.sendPresence({
+            status: status || "I'm online 24/7 🚀",
+            onlineType: "online",
+            bIsPlaying: true,
+            ProductName: "Fortnite"
+        });
+
+        return res.json({ success: true, message: "Status updated without reconnect." });
+    }
+
+    // Otherwise, fresh connect
+    disconnectUser(account_id);
     connectUser({ account_id, access_token, status });
 
     return res.json({ success: true, message: "Presence enabled." });
@@ -100,5 +112,5 @@ app.post('/togglePresence', async (req, res) => {
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-    console.log(`✅ Presence Manager with keepalive running on port ${PORT}`);
+    console.log(`✅ Presence Manager running with live status updates on port ${PORT}`);
 });
